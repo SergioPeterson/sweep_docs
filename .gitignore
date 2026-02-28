@@ -1,0 +1,14 @@
+# Sub-repos (managed separately)
+backend/
+apps/
+packages/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Claude memory (local only)
+.claude/
