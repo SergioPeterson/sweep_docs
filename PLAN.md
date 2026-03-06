@@ -13,8 +13,8 @@ Concise implementation roadmap organized by MVP slices. Each slice delivers a co
 ## Progress
 
 - [ ] Cross-cutting Guardrails Track (security, deploy, reliability)
-- [ ] Slice 1: Cleaner Onboarding
-- [ ] Slice 2: Customer Search & Browse
+- [x] Slice 1: Cleaner Onboarding
+- [x] Slice 2: Customer Search & Browse
 - [ ] Slice 3: Booking Flow
 - [ ] Slice 4: Payments & Payouts
 - [ ] Slice 5: Reviews & Ratings
@@ -103,21 +103,21 @@ This plan follows an incremental rollout model: every feature ships in phases wi
 
 ### Slice 1 Rollout Phases
 
-- [ ] Phase A: Scaffold onboarding routes/forms and placeholder API wiring
-- [ ] Phase B: Lock auth/profile/availability contracts and validation tests
-- [ ] Phase C: Implement DB + backend logic + integration tests
-- [ ] Phase D: Connect full web flow and run e2e onboarding journey
-- [ ] Phase E: Harden Stripe onboarding + canary rollout with monitoring
+- [x] Phase A: Scaffold onboarding routes/forms and placeholder API wiring
+- [x] Phase B: Lock auth/profile/availability contracts and validation tests
+- [x] Phase C: Implement DB + backend logic + integration tests
+- [x] Phase D: Connect full web flow and run e2e onboarding journey
+- [x] Phase E: Harden Stripe onboarding + canary rollout with monitoring
 
 ### 1.1 Database & Backend Setup
 
-- [ ] Create cleaner tables (users, cleaners, availability)
+- [x] Create cleaner tables (users, cleaners, availability)
   - Done when: migrations run, schema matches DATABASE_SCHEMA.md
   - Tests:
     - `test: cleaners table has required columns`
     - `test: availability table supports recurring schedules`
 
-- [ ] Auth integration (Clerk + API sync)
+- [x] Auth integration (Clerk + API sync)
   - Done when: cleaner can authenticate via Clerk and API role checks pass
   - Tests:
     - `test: missing bearer token returns 401 on protected endpoints`
@@ -126,14 +126,14 @@ This plan follows an incremental rollout model: every feature ships in phases wi
 
 ### 1.2 Profile Setup
 
-  - [ ] Profile API (create, update, get)
+  - [x] Profile API (create, update, get)
   - Done when: cleaner can set bio, photo, services, service area
   - Tests:
     - `test: POST /cleaner/profile updates bio`
     - `test: profile photo uploads to S3, stores signed URL`
     - `test: service area validates SF zip codes`
 
-- [ ] Pricing configuration
+- [x] Pricing configuration
   - Done when: cleaner can set hourly rate ($25-150 range)
   - Tests:
     - `test: rate below $25 returns validation error`
@@ -141,14 +141,14 @@ This plan follows an incremental rollout model: every feature ships in phases wi
 
 ### 1.3 Availability Setup
 
-- [ ] Availability API (set weekly schedule, block dates)
+- [x] Availability API (set weekly schedule, block dates)
   - Done when: cleaner can set recurring weekly hours and block specific dates
   - Tests:
     - `test: POST /cleaner/availability sets Mon-Fri 9am-5pm`
     - `test: overlapping time slots are rejected`
     - `test: blocked date removes availability for that day`
 
-- [ ] Availability query endpoint
+- [x] Availability query endpoint
   - Done when: can query cleaner's open slots for a date range
   - Tests:
     - `test: GET /cleaner/:id/availability?start=&end= returns open slots`
@@ -156,7 +156,7 @@ This plan follows an incremental rollout model: every feature ships in phases wi
 
 ### 1.4 Stripe Connect
 
-- [ ] Stripe Connect onboarding flow
+- [x] Stripe Connect onboarding flow
   - Done when: cleaner can connect Stripe account for payouts
   - Tests:
     - `test: POST /cleaner/stripe/connect returns Stripe onboarding URL`
@@ -165,7 +165,7 @@ This plan follows an incremental rollout model: every feature ships in phases wi
 
 ### 1.5 Frontend (Web)
 
-- [ ] Cleaner signup flow (pages: register, verify email, profile setup wizard)
+- [x] Cleaner signup flow (pages: register, verify email, profile setup wizard)
   - Done when: cleaner can complete onboarding end-to-end in browser
   - Tests:
     - `test: e2e - cleaner completes signup wizard`
@@ -184,15 +184,15 @@ This plan follows an incremental rollout model: every feature ships in phases wi
 
 ### Slice 2 Rollout Phases
 
-- [ ] Phase A: Scaffold search/list/profile pages with mock data
-- [ ] Phase B: Lock search/profile API contracts and filter semantics
-- [ ] Phase C: Implement geo search + availability filtering in backend
-- [ ] Phase D: Wire real web search UX (filters, map/list, profile)
-- [ ] Phase E: Harden ranking behavior + canary rollout and metrics checks
+- [x] Phase A: Scaffold search/list/profile pages with mock data
+- [x] Phase B: Lock search/profile API contracts and filter semantics
+- [x] Phase C: Implement geo search + availability filtering in backend
+- [x] Phase D: Wire real web search UX (filters, map/list, profile)
+- [x] Phase E: Harden ranking behavior + canary rollout and metrics checks
 
 ### 2.1 Customer Auth
 
-- [ ] Customer auth (Clerk session + platform role)
+- [x] Customer auth (Clerk session + platform role)
   - Done when: customer can authenticate and access customer-only endpoints
   - Tests:
     - `test: POST /auth/sync with role=customer upserts customer`
@@ -200,7 +200,7 @@ This plan follows an incremental rollout model: every feature ships in phases wi
 
 ### 2.2 Search API
 
-- [ ] Search cleaners endpoint (location, date, filters)
+- [x] Search cleaners endpoint (location, date, filters)
   - Done when: returns available cleaners sorted by relevance
   - Tests:
     - `test: GET /search/cleaners?lat=37.7749&lng=-122.4194&date=2024-02-01 returns available cleaners`
@@ -208,7 +208,7 @@ This plan follows an incremental rollout model: every feature ships in phases wi
     - `test: cleaner outside service area not returned`
     - `test: results include rating, rate, distance`
 
-- [ ] Filter & sort options
+- [x] Filter & sort options
   - Done when: can filter by price range, rating, services offered
   - Tests:
     - `test: filter min_rate=40&max_rate=60 excludes $35/hr cleaner`
@@ -216,7 +216,7 @@ This plan follows an incremental rollout model: every feature ships in phases wi
 
 ### 2.3 Cleaner Public Profile
 
-- [ ] Public profile endpoint
+- [x] Public profile endpoint
   - Done when: customers can view cleaner bio, photos, reviews, availability
   - Tests:
     - `test: GET /cleaners/:id returns public profile (no private data)`
@@ -224,13 +224,13 @@ This plan follows an incremental rollout model: every feature ships in phases wi
 
 ### 2.4 Frontend (Web)
 
-- [ ] Search page with map/list view
+- [x] Search page with map/list view
   - Done when: customer can search, filter, and browse results
   - Tests:
     - `test: e2e - search by zip returns results`
     - `test: clicking cleaner card opens profile page`
 
-- [ ] Cleaner profile page
+- [x] Cleaner profile page
   - Done when: shows full profile with availability calendar
   - Tests:
     - `test: e2e - profile shows bio, rate, available dates`
