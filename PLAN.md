@@ -1,495 +1,416 @@
-# Sweep - Implementation Plan
+# Sweep MVP Plan v2
 
 ## Overview
 
-Concise implementation roadmap organized by MVP slices. Each slice delivers a complete end-to-end feature.
+This is the working implementation plan for Sweep MVP. It is an actual-status tracker, not a simple aspirational roadmap.
 
-**Reference docs:** [SYSTEM_DESIGN_OVERVIEW.md](./SYSTEM_DESIGN_OVERVIEW.md) | [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) | [API_SPECIFICATION.md](./API_SPECIFICATION.md) | [BACKEND_ARCHITECTURE.md](./BACKEND_ARCHITECTURE.md) | [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) | [IMPLEMENTATION_GUARDRAILS.md](./IMPLEMENTATION_GUARDRAILS.md)
+- MVP scope is **web-first**.
+- `apps/mobile/` stays post-MVP unless explicitly promoted later.
+- A slice is only `Complete` when live backend behavior, live web behavior, required tests, and launch guardrails are all in place.
+- Work already built out of order stays in the plan, but is labeled honestly as `Partial` or `Scaffold` until it meets completion criteria.
 
-**Expanded execution plan (Feb 10, 2026):** [docs/plans/2026-02-10-implementation-execution-plan.md](./docs/plans/2026-02-10-implementation-execution-plan.md)
+**Reference docs:** [SYSTEM_DESIGN_OVERVIEW.md](./SYSTEM_DESIGN_OVERVIEW.md) | [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) | [API_SPECIFICATION.md](./API_SPECIFICATION.md) | [BACKEND_ARCHITECTURE.md](./BACKEND_ARCHITECTURE.md) | [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) | [IMPLEMENTATION_GUARDRAILS.md](./IMPLEMENTATION_GUARDRAILS.md) | [TESTING_STRATEGY.md](./TESTING_STRATEGY.md)
 
----
-
-## Progress
-
-- [ ] Cross-cutting Guardrails Track (security, deploy, reliability)
-- [x] Slice 1: Cleaner Onboarding
-- [x] Slice 2: Customer Search & Browse
-- [ ] Slice 3: Booking Flow
-- [ ] Slice 4: Payments & Payouts
-- [ ] Slice 5: Reviews & Ratings
-- [ ] Slice 6: Admin & Operations
+**Detailed execution notes:** [docs/plans/2026-02-10-implementation-execution-plan.md](./docs/plans/2026-02-10-implementation-execution-plan.md)
 
 ---
 
-## Delivery Model (Scaffolded, Not One-Shot)
+## Status Legend
 
-This plan follows an incremental rollout model: every feature ships in phases with test gates between phases.
-
-### Five-Phase Build Pattern (Use for Every Feature)
-
-1. **Phase A - Scaffold**
-   - Add route/page/handler skeleton and placeholder UI.
-   - Keep feature behind a flag or hidden route if incomplete.
-   - Goal: mergeable structure with no production behavior change.
-
-2. **Phase B - Contract**
-   - Lock request/response schema and validation.
-   - Add contract tests for happy path + key error cases.
-   - Goal: API shape and data contracts are stable before heavy logic.
-
-3. **Phase C - Data + Logic**
-   - Add DB changes (Prisma migration), business logic, and permissions.
-   - Add integration tests against real DB/services (or test doubles).
-   - Goal: feature works end-to-end in local and staging.
-
-4. **Phase D - Integration UX**
-   - Wire real frontend/mobile flows (remove mock placeholders).
-   - Add e2e tests for core journey.
-   - Goal: user-visible behavior is validated in staging.
-
-5. **Phase E - Hardening + Rollout**
-   - Add monitoring, alerts, retries, idempotency, and failure-path tests.
-   - Roll out with canary percentages and rollback criteria.
-   - Goal: safe production rollout with observability and quick recovery.
-
-### Promotion Gates (Do Not Skip)
-
-| Gate | Required Evidence |
-|---|---|
-| A -> B | Scaffold merged, feature flag defined, no regressions in lint/typecheck |
-| B -> C | Contract tests green, API schema reviewed |
-| C -> D | Integration tests green, auth/permission checks verified |
-| D -> E | e2e path green in staging, manual QA checklist completed |
-| E -> GA | Canary metrics healthy, alerts clean, rollback path validated |
-
-### Testing Ladder (Minimum)
-
-- **Unit tests** for pure business logic.
-- **Contract tests** for endpoint payloads and validation errors.
-- **Integration tests** for DB + service interactions.
-- **E2E tests** for primary user journey per slice.
-- **Manual checkpoint** after each slice before promoting to next slice.
-
-### Rollout Strategy
-
-- Ship incomplete work behind feature flags.
-- Roll out by percentage or tenant cohort: `10% -> 50% -> 100%`.
-- Define rollback triggers before release:
-  - error rate spike
-  - checkout/payment failure increase
-  - queue/DLQ growth
-  - latency SLO breach
+- **Complete**: live backend behavior, live web flow, required tests, and rollout/guardrail criteria are satisfied.
+- **Partial**: some real implementation exists, but at least one launch-critical requirement is still missing.
+- **Scaffold**: route/page/component exists or mock behavior exists, but the core business behavior is not real yet.
+- **Not started**: no meaningful implementation exists yet.
 
 ---
 
-## Cross-cutting Guardrails Track
+## Current Baseline
 
-**Goal:** Establish production guardrails early so feature slices ship safely.
+| Area | Status | Current reality |
+|---|---|---|
+| Track 0 - Contract + Launch Foundation | Not started | Core mismatches still exist across shared contracts, backend behavior, web behavior, and repo guardrails. |
+| Slice 1 - Cleaner Onboarding | Partial | Backend onboarding, availability, Stripe Connect bootstrap, and web cleaner profile/calendar flows are real. Hardening and live end-to-end evidence are still missing. |
+| Slice 2 - Customer Search & Browse | Partial | Search, cleaner profile, review read path, and public availability are real. Date-aware search and live availability-driven slot selection are still missing. |
+| Slice 3 - Booking Flow | Scaffold | Customer booking UI exists and backend create/cancel routes exist, but there are no holds, no conflict prevention, and no canonical confirm flow. |
+| Slice 4 - Payments & Payouts | Scaffold | Stripe Connect exists, but payment intents, payment state transitions, job completion, payouts, and reconciliation are not real. |
+| Slice 5 - Reviews & Ratings | Partial | Review read endpoints exist. Review creation, aggregate updates, and ranking integration do not. |
+| Slice 6 - Bonus Pool & Transparency | Partial | Bonus leaderboard/summary and customer fee breakdown ideas exist. Authoritative bonus calculation, persistence, awards, and ops ownership do not. |
+| Slice 7 - Admin & Operations | Partial | Admin dashboard/users/disputes surfaces exist. Dispute creation, refund execution, auditability, and runbooks are still missing. |
 
-- [ ] Migration-only production workflow (`prisma migrate deploy` in pipeline)
-- [ ] Strict auth middleware and authorization policy on all protected routes
-- [ ] Stripe webhook hardening (signature verify + idempotent store + async worker)
-- [ ] ECS deployment guardrails (circuit breaker rollback + alarms)
-- [ ] Reliability drill cadence (failover, queue/DLQ, webhook replay)
+---
 
-**Execution details:** See [IMPLEMENTATION_GUARDRAILS.md](./IMPLEMENTATION_GUARDRAILS.md)
+## Planning Rules
+
+### Delivery Model
+
+Every slice still follows the same five-phase model:
+
+1. **Scaffold**
+2. **Contract**
+3. **Data + Logic**
+4. **Integration UX**
+5. **Hardening + Rollout**
+
+The important change is status reporting: a slice can have code from later phases while still being only `Partial` overall.
+
+### Launch Blocking Rule
+
+`Track 0 - Contract + Launch Foundation` is a release blocker. No slice should be treated as complete for launch readiness until Track 0 is materially complete.
+
+### Documentation Sync Rule
+
+After each slice or track change, update the docs in the same PR:
+
+- `PLAN.md`
+- `API_SPECIFICATION.md`
+- any affected architecture doc
+- any affected testing or guardrail doc
+
+### Canonical Build Rules
+
+- Money values in API contracts are integer cents only.
+- Clerk bearer tokens are the production auth model.
+- `x-external-auth-id` is a local-development bridge, not a public production contract.
+- Canonical customer booking flow is:
+  `availability -> hold -> payment intent -> confirm`
+- The current direct `POST /bookings` path is non-canonical until it is rewritten to honor real slot selection and conflict rules.
+- Use `default branch` wording in planning docs until the repos are normalized around `main` versus `master`.
+
+---
+
+## Track 0: Contract + Launch Foundation
+
+**Status:** Not started
+
+**Goal:** Reconcile the contracts, implementations, and repo guardrails so new feature work is built on a stable base.
+
+### Why this comes first
+
+The current codebase has real progress, but it also has drift:
+
+- shared contracts and live backend behavior disagree in places
+- web flows mix real API calls with scaffolding and local-only success states
+- `apps/web` is missing the GitHub guardrails already present in other repos
+- booking and payment flows do not have a single canonical path yet
+
+### Work required
+
+1. Reconcile `packages/shared`, backend routes, and web API clients before adding new customer booking behavior.
+2. Normalize money units to integer cents at the API boundary; format dollars only in UI code.
+3. Make `hold -> payment intent -> confirm` the only canonical customer booking flow.
+4. Mark direct booking creation as transitional until it wraps the canonical flow instead of bypassing it.
+5. Update [API_SPECIFICATION.md](./API_SPECIFICATION.md) to show:
+   - what is live today
+   - what is partial or scaffolded
+   - what the canonical MVP contract should be
+6. Add missing `apps/web` repo guardrails:
+   - CI
+   - CodeQL
+   - dependency review
+   - CODEOWNERS
+   - provenance workflow
+   - branch/PR protections
+7. Finish cross-cutting hardening already captured in [IMPLEMENTATION_GUARDRAILS.md](./IMPLEMENTATION_GUARDRAILS.md):
+   - migration-only deploy workflow
+   - default-deny auth and ownership enforcement
+   - durable webhook idempotency using the database
+   - async webhook processing and retries
+   - alarms, bake windows, and rollback/runbooks
+8. Add a documentation maintenance rule to the working process so the docs do not drift again.
+
+### Done criteria
+
+- Shared contracts, backend handlers, and web clients agree on money units and endpoint intent.
+- Booking flow has a single documented canonical path.
+- `apps/web` has the same minimum PR guardrails as the other repos.
+- The API spec no longer claims the backend is only scaffolded.
+- Webhook processing is documented as durable and async, not in-memory only.
 
 ---
 
 ## Slice 1: Cleaner Onboarding
 
-**Goal:** A cleaner can sign up, set their profile, configure pricing/availability, and connect Stripe.
+**Status:** Partial
 
-### Slice 1 Rollout Phases
+**Goal:** A cleaner can authenticate, create a real profile, configure availability, and start Stripe Connect onboarding from the web app.
 
-- [x] Phase A: Scaffold onboarding routes/forms and placeholder API wiring
-- [x] Phase B: Lock auth/profile/availability contracts and validation tests
-- [x] Phase C: Implement DB + backend logic + integration tests
-- [x] Phase D: Connect full web flow and run e2e onboarding journey
-- [x] Phase E: Harden Stripe onboarding + canary rollout with monitoring
+### Real today
 
-### 1.1 Database & Backend Setup
+- User sync and `GET /auth/me` exist in backend.
+- Cleaner profile create/update and cleaner profile read exist.
+- Weekly availability and blackout persistence exist.
+- Public cleaner availability query exists.
+- Stripe Connect onboarding link creation exists.
+- Stripe `account.updated` webhook handling exists for onboarding state.
+- Web cleaner profile, calendar, dashboard, and earnings pages call live backend endpoints.
 
-- [x] Create cleaner tables (users, cleaners, availability)
-  - Done when: migrations run, schema matches DATABASE_SCHEMA.md
-  - Tests:
-    - `test: cleaners table has required columns`
-    - `test: availability table supports recurring schedules`
+### Still missing before this slice is complete
 
-- [x] Auth integration (Clerk + API sync)
-  - Done when: cleaner can authenticate via Clerk and API role checks pass
-  - Tests:
-    - `test: missing bearer token returns 401 on protected endpoints`
-    - `test: POST /auth/sync upserts user with cleaner role`
-    - `test: role mismatch returns 403 on cleaner endpoints`
+- Profile photo upload/storage pipeline.
+- Clear production-only bearer-token path for all cleaner flows.
+- Durable webhook idempotency and async processing instead of in-memory dedupe.
+- Live browser smoke coverage against a real backend; current Playwright coverage is mostly mocked.
+- Rollout/monitoring evidence for Stripe onboarding completion and failure handling.
 
-### 1.2 Profile Setup
+### Completion evidence
 
-  - [x] Profile API (create, update, get)
-  - Done when: cleaner can set bio, photo, services, service area
-  - Tests:
-    - `test: POST /cleaner/profile updates bio`
-    - `test: profile photo uploads to S3, stores signed URL`
-    - `test: service area validates SF zip codes`
-
-- [x] Pricing configuration
-  - Done when: cleaner can set hourly rate ($25-150 range)
-  - Tests:
-    - `test: rate below $25 returns validation error`
-    - `test: rate persists and returns in profile GET`
-
-### 1.3 Availability Setup
-
-- [x] Availability API (set weekly schedule, block dates)
-  - Done when: cleaner can set recurring weekly hours and block specific dates
-  - Tests:
-    - `test: POST /cleaner/availability sets Mon-Fri 9am-5pm`
-    - `test: overlapping time slots are rejected`
-    - `test: blocked date removes availability for that day`
-
-- [x] Availability query endpoint
-  - Done when: can query cleaner's open slots for a date range
-  - Tests:
-    - `test: GET /cleaner/:id/availability?start=&end= returns open slots`
-    - `test: blocked dates not returned as available`
-
-### 1.4 Stripe Connect
-
-- [x] Stripe Connect onboarding flow
-  - Done when: cleaner can connect Stripe account for payouts
-  - Tests:
-    - `test: POST /cleaner/stripe/connect returns Stripe onboarding URL`
-    - `test: webhook updates cleaner stripe_connected status`
-    - `test: cleaner without Stripe cannot be booked`
-
-### 1.5 Frontend (Web)
-
-- [x] Cleaner signup flow (pages: register, verify email, profile setup wizard)
-  - Done when: cleaner can complete onboarding end-to-end in browser
-  - Tests:
-    - `test: e2e - cleaner completes signup wizard`
-    - `test: form validation shows inline errors`
-    - `test: progress persists if user leaves mid-wizard`
-
-### Slice 1 Checkpoint
-
-**Manually verify:** Create a test cleaner account, complete profile, set $50/hr rate, set availability for next week, connect Stripe test account. Confirm profile appears complete in database.
+- Cleaner can complete onboarding from browser against live backend.
+- Profile, services, schedule, and blocked dates persist correctly.
+- Stripe onboarding status is durable across restarts and webhook replays.
+- Automated tests cover validation, auth, ownership, and webhook replay behavior.
 
 ---
 
 ## Slice 2: Customer Search & Browse
 
-**Goal:** A customer can sign up, search for cleaners by location/date, and view cleaner profiles.
+**Status:** Partial
 
-### Slice 2 Rollout Phases
+**Goal:** A customer can search for cleaners, open a cleaner profile, inspect reviews, and choose a real available slot.
 
-- [x] Phase A: Scaffold search/list/profile pages with mock data
-- [x] Phase B: Lock search/profile API contracts and filter semantics
-- [x] Phase C: Implement geo search + availability filtering in backend
-- [x] Phase D: Wire real web search UX (filters, map/list, profile)
-- [x] Phase E: Harden ranking behavior + canary rollout and metrics checks
+### Real today
 
-### 2.1 Customer Auth
+- `GET /search/cleaners` returns live search results.
+- `GET /cleaners/:id` returns live cleaner profile data.
+- `GET /cleaners/:id/reviews` returns live review read data.
+- `GET /cleaners/:id/availability?date=&duration=` returns real slots.
+- Web search page and customer cleaner profile page call the backend.
 
-- [x] Customer auth (Clerk session + platform role)
-  - Done when: customer can authenticate and access customer-only endpoints
-  - Tests:
-    - `test: POST /auth/sync with role=customer upserts customer`
-    - `test: customer cannot access /cleaner/* endpoints`
+### Still missing before this slice is complete
 
-### 2.2 Search API
+- Search must honor `date` by excluding cleaners without valid availability on that date.
+- The customer cleaner profile must use live availability instead of hardcoded time slots.
+- Decide map behavior for MVP explicitly:
+  - either real map integration
+  - or list-first launch with the map kept behind a flag
+- Add at least one live end-to-end customer flow:
+  `search -> profile -> select slot`
 
-- [x] Search cleaners endpoint (location, date, filters)
-  - Done when: returns available cleaners sorted by relevance
-  - Tests:
-    - `test: GET /search/cleaners?lat=37.7749&lng=-122.4194&date=2024-02-01 returns available cleaners`
-    - `test: cleaner with no availability on date not returned`
-    - `test: cleaner outside service area not returned`
-    - `test: results include rating, rate, distance`
+### Completion evidence
 
-- [x] Filter & sort options
-  - Done when: can filter by price range, rating, services offered
-  - Tests:
-    - `test: filter min_rate=40&max_rate=60 excludes $35/hr cleaner`
-    - `test: sort=rating_desc returns highest rated first`
-
-### 2.3 Cleaner Public Profile
-
-- [x] Public profile endpoint
-  - Done when: customers can view cleaner bio, photos, reviews, availability
-  - Tests:
-    - `test: GET /cleaners/:id returns public profile (no private data)`
-    - `test: includes aggregate rating and review count`
-
-### 2.4 Frontend (Web)
-
-- [x] Search page with map/list view
-  - Done when: customer can search, filter, and browse results
-  - Tests:
-    - `test: e2e - search by zip returns results`
-    - `test: clicking cleaner card opens profile page`
-
-- [x] Cleaner profile page
-  - Done when: shows full profile with availability calendar
-  - Tests:
-    - `test: e2e - profile shows bio, rate, available dates`
-
-### Slice 2 Checkpoint
-
-**Manually verify:** As a customer, search for cleaners in 94110, filter to $40-60/hr, view a cleaner profile, see their available dates next week.
+- Search results change when `date` changes.
+- Customer selects from real returned slots, not UI placeholders.
+- List view is launch-ready; map is either real or clearly non-blocking.
+- Live end-to-end customer browse flow is covered in test and manual verification.
 
 ---
 
 ## Slice 3: Booking Flow
 
-**Goal:** A customer can select a cleaner, choose date/time/services, and create a booking.
+**Status:** Scaffold
 
-### Slice 3 Rollout Phases
+**Goal:** A customer can reserve a slot, carry that reservation through checkout, confirm the booking exactly once, and manage the resulting booking.
 
-- [ ] Phase A: Scaffold booking draft flow and slot-selection UI
-- [ ] Phase B: Lock booking/hold API contracts and idempotency behavior
-- [ ] Phase C: Implement holds, conflict prevention, and cancellation logic
-- [ ] Phase D: Connect checkout journey end-to-end in staging
-- [ ] Phase E: Harden concurrency/failure handling + canary rollout
+### What exists today
 
-### 3.1 Booking API
+- Customer booking pages exist in the web app.
+- Backend exposes direct booking create, booking read/list, and booking cancel routes.
+- Pricing helpers and refund helpers exist in the backend domain layer.
 
-- [ ] Create booking endpoint
-  - Done when: customer can create a hold on a cleaner's time slot
-  - Tests:
-    - `test: POST /bookings creates booking with status=confirmed`
-    - `test: booking on unavailable slot returns 409`
-    - `test: double-booking same slot returns 409`
-    - `test: booking calculates total (rate x hours + 8% fee)`
+### What is not real yet
 
-- [ ] Booking management endpoints
-  - Done when: can view, cancel bookings
-  - Tests:
-    - `test: GET /me/bookings returns customer's bookings`
-    - `test: GET /cleaner/dashboard returns cleaner upcoming bookings`
-    - `test: POST /bookings/:id/cancel cancels if >24hrs before`
+- No booking hold creation route.
+- No hold expiry handling.
+- No idempotent booking confirm flow.
+- No conflict prevention based on selected slot.
+- Current direct `POST /bookings` does not honor the chosen slot and fabricates booking time.
+- Customer checkout is still a frontend-only success simulation.
+- Notification sending does not exist.
 
-### 3.2 Availability Locking
+### Build requirements
 
-- [ ] Temporary hold system (5 min reservation during checkout)
-  - Done when: slot is held while customer completes payment
-  - Tests:
-    - `test: held slot not bookable by another customer`
-    - `test: hold expires after 5 min, slot released`
+1. Add `POST /booking/holds` with:
+   - TTL
+   - idempotency
+   - slot conflict checks
+   - pricing snapshot
+2. Add `POST /booking/confirm` that confirms only from a valid hold plus successful payment state.
+3. Keep `POST /bookings` only if it becomes a thin wrapper over the canonical flow.
+4. Ensure booking list/detail/cancel behavior uses real lifecycle state.
+5. Add notification triggers for booking creation and cancellation.
+6. Rewire the web booking flow so it passes a hold identifier through checkout instead of raw querystring totals.
 
-### 3.3 Notifications
+### Completion evidence
 
-- [ ] Booking notification triggers (email)
-  - Done when: cleaner notified of new booking, customer gets confirmation
-  - Tests:
-    - `test: booking created sends email to cleaner`
-    - `test: booking confirmed sends email to customer`
-
-### 3.4 Frontend (Web)
-
-- [ ] Booking flow (select date/time -> services -> review -> checkout)
-  - Done when: customer can complete booking from cleaner profile
-  - Tests:
-    - `test: e2e - select slot, choose services, proceed to payment`
-    - `test: unavailable slots are disabled in calendar`
-
-### Slice 3 Checkpoint
-
-**Manually verify:** As customer, book a cleaner for 3 hours next Tuesday at $55/hr. Confirm booking shows $178.20 total (with 8% fee). Check cleaner received email notification.
+- Two customers cannot book the same slot.
+- Expired holds cannot be confirmed.
+- Duplicate idempotency keys behave correctly.
+- Web customer flow is:
+  `profile -> choose real slot -> create hold -> checkout -> confirm`
 
 ---
 
 ## Slice 4: Payments & Payouts
 
-**Goal:** Customer pays at booking, cleaner receives payout after job completion.
+**Status:** Scaffold
 
-### Slice 4 Rollout Phases
+**Goal:** Payment, completion, payout, and reconciliation work as a single reliable booking-money lifecycle.
 
-- [ ] Phase A: Scaffold payment and earnings UI with placeholders
-- [ ] Phase B: Lock payment/payout/webhook contracts and event states
-- [ ] Phase C: Implement Stripe intent/webhook/payout logic with idempotency
-- [ ] Phase D: Connect real payment UX and cleaner earnings screens
-- [ ] Phase E: Harden reconciliation/retry paths + controlled rollout
+### What exists today
 
-### 4.1 Payment Processing
+- Stripe Connect onboarding bootstrap exists.
+- Booking pricing helpers exist.
+- Cleaner earnings/dashboard surfaces exist in the web app.
 
-- [ ] Stripe payment intent on booking
-  - Done when: customer card charged when booking confirmed
-  - Tests:
-    - `test: booking confirmation creates Stripe charge`
-    - `test: failed payment does not create confirmed booking and notifies customer`
-    - `test: successful payment updates booking to confirmed`
+### What is not real yet
 
-- [ ] Payment webhook handling
-  - Done when: Stripe webhooks update payment status reliably
-  - Tests:
-    - `test: payment_intent.succeeded webhook marks booking paid`
-    - `test: webhook idempotency - duplicate events handled`
+- `POST /payments/create-intent` is still stubbed.
+- Payment records and payment state transitions are not fully implemented.
+- `POST /bookings/:id/complete` does not exist.
+- Customer confirm / auto-confirm does not exist.
+- Payout creation and Stripe transfer execution do not exist.
+- Reconciliation and retry flows do not exist.
 
-### 4.2 Job Completion
+### Build requirements
 
-- [ ] Job completion flow
-  - Done when: cleaner marks done, customer confirms (or auto-confirm 24hr)
-  - Tests:
-    - `test: POST /bookings/:id/complete sets status=completed`
-    - `test: customer confirm releases payout`
-    - `test: auto-confirm triggers after 24hr if no disputes`
+1. Make payment intent creation real Stripe-backed, or fold it into the canonical confirm flow.
+2. Persist payment state and webhook events durably.
+3. Add booking completion endpoint for cleaner action.
+4. Add customer confirm or timed auto-confirm behavior.
+5. Create payout records and Stripe transfers after successful completion.
+6. Reconcile booking, payment, payout, and webhook states with replay-safe handling.
+7. Update cleaner earnings/dashboard data to show actual payout lifecycle.
 
-### 4.3 Payouts
+### Completion evidence
 
-- [ ] Stripe Connect payout to cleaner
-  - Done when: cleaner receives transfer after job confirmed
-  - Tests:
-    - `test: payout creates Stripe transfer to cleaner account`
-    - `test: payout amount = cleaner rate x hours (no platform fee deducted)`
-    - `test: payout records stored in payouts table`
-
-### 4.4 Frontend (Web)
-
-- [ ] Payment form (Stripe Elements)
-  - Done when: customer can enter card and pay securely
-  - Tests:
-    - `test: e2e - enter test card, payment succeeds`
-    - `test: invalid card shows error`
-
-- [ ] Cleaner earnings dashboard
-  - Done when: cleaner can view pending/completed payouts
-  - Tests:
-    - `test: e2e - cleaner sees payout history`
-
-### Slice 4 Checkpoint
-
-**Manually verify:** Complete a booking with Stripe test card. Mark job complete as cleaner. Confirm as customer. Verify Stripe dashboard shows transfer to cleaner's connected account.
+- Successful payment confirms a booking exactly once.
+- Failed payment does not create or retain an invalid confirmed booking.
+- Completed job eventually produces a payout record and Stripe transfer.
+- Webhook replay does not duplicate payment or payout side effects.
 
 ---
 
 ## Slice 5: Reviews & Ratings
 
-**Goal:** Customers can review cleaners after jobs, ratings affect search ranking.
+**Status:** Partial
 
-### Slice 5 Rollout Phases
+**Goal:** Customers can leave reviews after completed bookings, and ratings affect discovery in a controlled way.
 
-- [ ] Phase A: Scaffold review submission/list UI
-- [ ] Phase B: Lock review/rating contracts and constraints
-- [ ] Phase C: Implement write path + aggregate rating updates
-- [ ] Phase D: Wire profile/search UX with live ratings
-- [ ] Phase E: Harden abuse/reporting + rollout with ranking regression checks
+### Real today
 
-### 5.1 Reviews API
+- Cleaner profile review read path exists.
+- Cleaner aggregate rating and review count fields exist in the database and API responses.
 
-- [ ] Create review endpoint
-  - Done when: customer can submit rating (1-5) and text review after completed job
-  - Tests:
-    - `test: POST /bookings/:id/review creates review`
-    - `test: review only allowed after job completed`
-    - `test: one review per booking enforced`
-    - `test: rating must be 1-5`
+### Still missing before this slice is complete
 
-- [ ] Review retrieval
-  - Done when: reviews appear on cleaner profile
-  - Tests:
-    - `test: GET /cleaners/:id/reviews returns paginated reviews`
-    - `test: reviews sorted by newest first`
+- `POST /bookings/:id/review` creation path.
+- One-review-per-booking enforcement in the booking lifecycle.
+- Validation that only completed bookings can be reviewed.
+- Aggregate rating updates when a new review is created.
+- Search ranking integration that uses live review data.
 
-### 5.2 Rating Aggregation
+### Completion evidence
 
-- [ ] Calculate and cache cleaner ratings
-  - Done when: average rating updates after each review
-  - Tests:
-    - `test: new review updates cleaner average_rating`
-    - `test: rating calculated from last 50 reviews (recency weighted)`
-
-### 5.3 Search Ranking Integration
-
-- [ ] Factor ratings into search results
-  - Done when: higher-rated cleaners rank higher (with availability)
-  - Tests:
-    - `test: search default sort factors in rating`
-    - `test: new cleaner without reviews still appears`
-
-### 5.4 Frontend (Web)
-
-- [ ] Review submission form (post-booking)
-  - Done when: customer prompted to review after job completion
-  - Tests:
-    - `test: e2e - submit 5-star review with comment`
-
-- [ ] Reviews display on profile
-  - Done when: cleaner profile shows reviews with pagination
-  - Tests:
-    - `test: e2e - profile shows rating average and review list`
-
-### Slice 5 Checkpoint
-
-**Manually verify:** Complete a booking flow. Submit a 5-star review as customer. Check cleaner profile shows the review and updated rating. Search results reflect rating.
+- Completed bookings can be reviewed exactly once.
+- New review updates aggregate rating and count.
+- Search ranking uses rating without hiding new cleaners unfairly.
+- Tests cover review permissions, duplicates, and aggregate update logic.
 
 ---
 
-## Slice 6: Admin & Operations
+## Slice 6: Bonus Pool & Transparency
 
-**Goal:** Admin can manage users, handle disputes, view metrics.
+**Status:** Partial
 
-### Slice 6 Rollout Phases
+**Goal:** The bonus pool is not just a marketing line item; it is a real, explainable, and auditable part of the platform economics.
 
-- [ ] Phase A: Scaffold admin routes and dashboard shells
-- [ ] Phase B: Lock admin/dispute/metrics API contracts
-- [ ] Phase C: Implement RBAC, dispute resolution, and metrics queries
-- [ ] Phase D: Connect admin UI workflows end-to-end
-- [ ] Phase E: Harden auditability/runbooks + phased admin rollout
+### Real today
 
-### 6.1 Admin Auth
+- Bonus leaderboard and cleaner bonus summary endpoints exist.
+- Customer-facing fee breakdown concepts already appear in web booking flows.
 
-- [ ] Admin role and protected routes
-  - Done when: admin users can access /admin/* endpoints
-  - Tests:
-    - `test: non-admin gets 403 on /admin/*`
-    - `test: admin can access all admin endpoints`
+### Still missing before this slice is complete
 
-### 6.2 User Management
+- Authoritative bonus period calculation from real completed-booking GMV.
+- Persistent bonus awards tied to a period and cleaner.
+- Distribution job/process for actual bonus awards.
+- Admin or ops visibility into pool totals, period state, and award history.
+- Clear operational ownership for recalculation, adjustments, and disputes.
 
-- [ ] View and manage users (cleaners, customers)
-  - Done when: admin can list, search, suspend users
-  - Tests:
-    - `test: GET /admin/users returns paginated user list`
-    - `test: POST /admin/users/:id/suspend deactivates user`
-    - `test: suspended cleaner not returned in search`
+### Completion evidence
 
-### 6.3 Dispute Handling
-
-- [ ] Dispute creation and resolution
-  - Done when: customer can report issue, admin can resolve
-  - Tests:
-    - `test: POST /bookings/:id/dispute creates dispute`
-    - `test: admin can issue refund, credit, or dismiss`
-    - `test: refund triggers Stripe refund`
-
-### 6.4 Metrics Dashboard
-
-- [ ] Basic operational metrics
-  - Done when: admin can view bookings, revenue, user counts
-  - Tests:
-    - `test: GET /admin/stats returns GMV, booking count, user counts`
-    - `test: metrics filterable by date range`
-
-### 6.5 Frontend (Web)
-
-- [ ] Admin dashboard pages
-  - Done when: admin can manage platform from web UI
-  - Tests:
-    - `test: e2e - admin logs in, views user list`
-    - `test: e2e - admin resolves dispute with refund`
-
-### Slice 6 Checkpoint
-
-**Manually verify:** Log in as admin. View user list. Create a dispute on a completed booking. Resolve with partial refund. Verify Stripe shows refund.
+- Bonus pool amount is derived from real GMV, not placeholder data.
+- Award history is persisted and queryable.
+- Cleaner-facing bonus summaries reflect real stored periods and awards.
+- Ops can explain how a period was calculated and distributed.
 
 ---
 
-## Post-MVP (Future Slices)
+## Slice 7: Admin & Operations
 
-- [ ] Mobile app (React Native)
-- [ ] SMS notifications
-- [ ] Bonus system for top cleaners
-- [ ] Background check integration
-- [ ] Multi-city expansion
+**Status:** Partial
+
+**Goal:** Admin tools can support a live marketplace, including disputes, user management, financial triage, and operational visibility.
+
+### Real today
+
+- Admin dashboard route exists.
+- Admin user listing and user suspension endpoint exist.
+- Admin dispute listing and resolve endpoint exist.
+
+### Still missing before this slice is complete
+
+- Customer-facing `POST /bookings/:id/dispute` creation flow.
+- Actual refund execution tied to dispute resolution.
+- Date-filtered/admin-grade stats instead of a single fixed summary.
+- Suspension effects enforced in customer search and booking eligibility.
+- Audit log and booking state transition visibility for support actions.
+- Runbooks for dispute handling, refund failures, and manual replay/recovery.
+
+### Completion evidence
+
+- Admin can see, create, resolve, and audit disputes end to end.
+- Refund and re-clean decisions trigger the correct downstream actions.
+- Suspended users are blocked from the relevant product surfaces.
+- Ops has enough state visibility to debug live incidents without raw database access.
+
+---
+
+## Test Plan
+
+### Baseline to preserve
+
+Keep the currently passing automated suites in:
+
+- `backend`
+- `packages/shared`
+- `apps/web`
+- `apps/mobile`
+
+### New tests required
+
+1. Shared contract tests for:
+   - hold creation
+   - booking confirm
+   - booking complete
+   - booking review
+   - booking dispute
+   - refund behavior
+   - money-unit consistency
+2. Backend integration tests for:
+   - expired holds
+   - duplicate idempotency keys
+   - double-booking prevention
+   - webhook replay
+   - payout creation
+   - refund execution
+   - rating aggregation
+3. Live web end-to-end coverage for launch blockers:
+   - cleaner onboarding
+   - customer search/profile with real availability
+   - hold -> payment intent -> confirm
+   - cancellation/refund
+   - cleaner complete -> customer confirm -> payout
+
+### Rule for mocked e2e tests
+
+Mocked Playwright tests are still useful for fast UI checks, but mocked tests alone do not count as slice-complete evidence.
+
+---
+
+## Assumptions And Defaults
+
+- MVP launch remains web-first.
+- `apps/mobile` is not a launch gate.
+- Existing out-of-order work remains in place and is tracked honestly rather than hidden.
+- Interactive map is not a launch blocker if list view plus distance sorting is solid.
+- The backend may keep transitional routes temporarily, but new work should be built toward the canonical flow described here.
