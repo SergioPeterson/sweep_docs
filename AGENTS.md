@@ -4,6 +4,12 @@ If you are reading this file, also read `CLAUDE.md` in this same directory befor
 
 If both files contain instructions, follow both and use the stricter rule when they conflict.
 
+## Repo Map
+
+- `https://github.com/SergioPeterson/sweep_webserver` is the backend repo.
+- `https://github.com/SergioPeterson/sweep_web` is the app/web repo.
+- `https://github.com/SergioPeterson/sweep_mobile` is the app/mobile repo.
+
 ## Non-Negotiable Testing Gate
 
 - Every new function, behavior change, and bug fix must include corresponding automated tests in the same PR.
@@ -28,4 +34,3 @@ If both files contain instructions, follow both and use the stricter rule when t
 - Release artifacts must have supply-chain provenance attestation (SLSA-aligned build provenance).
 - For AI-related changes, run evals continuously on every change; fail PRs when evals are required but missing.
 - Follow secure SDLC baseline controls: NIST SSDF (SP 800-218) and OWASP ASVS 5.0.0.
-
