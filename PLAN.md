@@ -370,39 +370,204 @@ The current codebase has real progress, but it also has drift:
 
 **Status:** Not started
 
-**Goal:** AI agents can connect to a user's Sweep account via MCP, browse cleaners, create bookings, and initiate payments with explicit capability grants, spending limits, and approval guardrails.
+**Goal:** AI agents (Claude, ChatGPT, etc.) can connect to a user's Sweep account via MCP, search for cleaners, create bookings, and make payments on the user's behalf — securely, with user-controlled spending limits and approval gates.
 
 **Design doc:** [AGENT_API_ARCHITECTURE.md](./AGENT_API_ARCHITECTURE.md)
 
-### Rollout phases
+### Slice 8 Rollout Phases
 
-- Phase A: Scaffold MCP endpoint path, protected-resource metadata, registered-client auth, and read-only tool stubs.
-- Phase B: Lock Clerk OAuth verification, Sweep capability grants, transport/security contracts, and auth tests.
-- Phase C: Implement read-only tools, agent grants/sessions, and audit logging.
-- Phase D: Implement booking mutation tools with approval snapshots and revalidation.
-- Phase E: Implement payment tools, spending limits, gateway hardening, and an optional preview-gated SPT adapter.
+- [ ] Phase A: Scaffold MCP endpoint path, protected-resource metadata, registered-client auth, and read-only tool stubs
+- [ ] Phase B: Lock Clerk OAuth verification, Sweep capability grants, transport/security contracts, and auth tests
+- [ ] Phase C: Implement read-only tools, agent grants/sessions, and audit logging
+- [ ] Phase D: Implement booking mutation tools with approval snapshots and revalidation
+- [ ] Phase E: Implement payment tools, spending limits, gateway hardening, and optional preview-gated SPT adapter
 
-### Build requirements
+### 8.1 MCP Server Scaffold & OAuth
 
-1. Add MCP Streamable HTTP support at `/mcp` with initialization handshake, session binding, and `Origin` validation.
-2. Use Clerk OAuth for identity and resource protection, but enforce Sweep-specific agent permissions as first-party capabilities instead of custom OAuth scopes.
-3. Require approved/registered agent clients at launch; leave dynamic client registration for a later hardening decision.
-4. Implement read-only tools for search, cleaner profile, availability, quote generation, and booking history.
-5. Implement mutation tools for create/cancel/reschedule/rate, with Tier 3 requests stored as approval snapshots rather than long-lived booking holds.
-6. Revalidate availability and price when a delayed approval is accepted before creating a real 5-minute hold.
-7. Use the existing saved-payment-method Stripe flow for MVP agent payments, with explicit fallback to customer checkout when SCA or manual payment is required.
-8. Keep any Stripe Shared Payment Token path behind a feature flag until preview access, partner support, and additional testing exist.
-9. Add local revocation, audit logging, per-user/per-session rate limiting, and booking/payment spending caps.
-10. Add web/mobile settings so users can inspect connected agents, manage capabilities, approve requests, and revoke access.
+- [ ] Streamable HTTP transport endpoint (`/mcp`)
+  - Done when: MCP clients can connect, perform initialization handshake, and discover tools
+  - Tests:
+    - `test: POST /mcp returns valid JSON-RPC initialize response`
+    - `test: unauthenticated request returns 401 with WWW-Authenticate header`
+    - `test: session ID assigned on initialization and required on subsequent requests`
+    - `test: invalid Origin header on GET/POST /mcp returns 403`
 
-### Completion evidence
+- [ ] OAuth 2.1 via Clerk
+  - Done when: agent completes Authorization Code + PKCE flow, receives a Clerk OAuth access token, and can call tools after token verification plus resource/audience checks
+  - Tests:
+    - `test: GET /.well-known/oauth-protected-resource/mcp returns valid metadata pointing to Clerk`
+    - `test: valid Clerk OAuth token grants access to MCP tools`
+    - `test: valid Clerk token with wrong audience/resource binding returns 401`
+    - `test: expired token returns 401`
+    - `test: revoked token returns 401`
 
-- MCP auth validates token issuer plus resource/audience binding and rejects invalid origins.
-- Agents can browse with read-only capabilities and never receive private cross-tenant data.
-- Above-cap or first-time-cleaner bookings require approval and are revalidated before a real hold is created.
-- Agent payment attempts either complete safely via saved payment method or hand off cleanly to normal checkout without accidental charges.
-- Users can revoke an agent and the very next tool call is blocked.
-- Automated coverage exists for auth, capabilities, approval expiry, requote/conflict behavior, payment fallback, audit logs, and revocation.
+- [ ] Registered agent clients + first-party capability grants
+  - Done when: approved MCP clients can connect through Clerk and Sweep enforces app-level capabilities independent of OAuth scopes
+  - Tests:
+    - `test: unsupported client_id is rejected before tool execution`
+    - `test: consent screen displayed to user on first authorization`
+    - `test: valid token without payments.charge capability returns 403 AGENT_CAPABILITY_REQUIRED`
+    - `test: revoking local agent grant blocks a still-valid token immediately`
+
+### 8.2 Read-Only Tools
+
+- [ ] `search_cleaners` — search by location, date, service type, price range, rating
+  - Done when: agent can search and receive structured results
+  - Tests:
+    - `test: search_cleaners with lat/lng returns available cleaners`
+    - `test: search_cleaners requires marketplace.read capability`
+    - `test: user-generated content in results is sanitized`
+
+- [ ] `get_cleaner_profile` — full profile with reviews, rates, badges
+  - Done when: agent receives cleaner details matching public profile API
+  - Tests:
+    - `test: get_cleaner_profile returns structured profile (no private data)`
+
+- [ ] `check_availability` — check specific cleaner's open slots for a date range
+  - Done when: agent can check slots before attempting to book
+  - Tests:
+    - `test: check_availability returns open slots for valid date`
+    - `test: check_availability for past date returns error`
+
+- [ ] `get_booking_quote` — calculate price for cleaner + service + duration
+  - Done when: agent receives breakdown (subtotal, platform fee, total)
+  - Tests:
+    - `test: get_booking_quote calculates correct total with 8% fee`
+
+- [ ] `get_my_bookings` — list user's upcoming, past, and cancelled bookings
+  - Done when: agent can see the authenticated user's booking history
+  - Tests:
+    - `test: get_my_bookings returns only the authenticated user's bookings`
+    - `test: get_my_bookings supports confirmed, in_progress, completed, cancelled, and disputed status filtering`
+
+### 8.3 Mutation Tools (Booking)
+
+- [ ] `create_booking` — create and hold a booking (returns details for user review)
+  - Done when: agent can create a standard 5-minute booking hold for auto-approved requests and a pending approval snapshot for Tier 3 requests
+  - Tests:
+    - `test: create_booking requires bookings.create capability`
+    - `test: create_booking within spending cap creates a 5-minute hold (Tier 2)`
+    - `test: create_booking above spending cap returns pending_approval without creating a hold (Tier 3)`
+    - `test: approving a pending request revalidates availability and creates a hold atomically`
+    - `test: approval fails with booking_conflict if slot was taken before approval`
+    - `test: approval fails with needs_requote if recalculated total exceeds approved amount`
+    - `test: first-time cleaner triggers Tier 3 approval even within spending cap`
+    - `test: create_booking on unavailable slot returns 409`
+    - `test: idempotency key prevents duplicate bookings`
+
+- [ ] `cancel_booking` — cancel an existing booking
+  - Done when: agent can cancel with soft confirmation
+  - Tests:
+    - `test: cancel_booking requires bookings.manage capability`
+    - `test: cancel_booking >24hrs before returns full refund amount`
+    - `test: cancel_booking on non-owned booking returns 403`
+
+- [ ] `reschedule_booking` — modify date/time of existing booking
+  - Done when: agent can reschedule with availability and conflict checks
+  - Tests:
+    - `test: reschedule_booking requires bookings.manage capability`
+    - `test: reschedule_booking checks new slot availability`
+    - `test: reschedule_booking recalculates pricing if duration changes`
+    - `test: idempotency key prevents duplicate reschedules`
+
+- [ ] Tiered approval system
+  - Done when: Tier 0-1 auto-approve, Tier 2 within-cap auto-approves, Tier 3 creates an approval snapshot and push notification, Tier 4 remains future-facing and requires interactive approval plus reverification
+  - Tests:
+    - `test: booking within per-transaction cap returns approval_status=approved`
+    - `test: booking above cap creates pending approval and sends push notification`
+    - `test: pending approval expires after 15 minutes`
+    - `test: user deny via push notification returns structured denial to agent`
+    - `test: approval notification explains that price and availability are revalidated on approval`
+
+### 8.4 Payment Tools
+
+- [ ] `confirm_and_pay_booking` — confirm held booking and process payment using Sweep's existing saved-payment-method flow
+  - Done when: agent can complete payment using the customer's saved Stripe payment method, subject to approval checks and safe handoff when SCA or manual payment is required
+  - Tests:
+    - `test: confirm_and_pay_booking requires payments.charge capability`
+    - `test: payment amount is recalculated server-side (never trust agent-provided amount)`
+    - `test: successful payment transitions booking to confirmed`
+    - `test: failed payment does not confirm booking`
+    - `test: payment_intent.requires_action returns requires_customer_payment without confirming booking`
+    - `test: expired hold cannot be paid`
+
+- [ ] Spending limits
+  - Done when: per-transaction, daily, and weekly aggregate limits are enforced server-side during both hold creation and payment confirmation
+  - Tests:
+    - `test: per-transaction cap blocks single booking above limit`
+    - `test: daily aggregate cap blocks when cumulative agent spend exceeds limit`
+    - `test: weekly aggregate cap blocks when rolling 7-day spend exceeds limit`
+    - `test: payment confirmation re-checks projected aggregate spend before charging`
+    - `test: user can configure custom spending limits via web/mobile`
+
+- [ ] `rate_cleaner` — submit rating and review after completed booking
+  - Done when: agent can submit a review on behalf of user
+  - Tests:
+    - `test: rate_cleaner requires reviews.write capability`
+    - `test: rate_cleaner only allowed after job completed`
+    - `test: one review per booking enforced`
+
+- [ ] Optional preview-gated Stripe Shared Payment Token adapter
+  - Done when: approved preview partners can pass a granted SPT to Sweep behind a feature flag without changing the default payment path
+  - Tests:
+    - `test: SPT path is disabled unless feature flag is on`
+    - `test: valid granted SPT can be used to create a payment intent`
+    - `test: invalid or expired granted SPT returns structured payment error`
+
+### 8.5 Security & Observability
+
+- [ ] Input validation and sanitization on all tool parameters
+  - Done when: Zod schemas validate every tool input; user-generated content sanitized before returning to agents
+  - Tests:
+    - `test: malformed tool input returns structured validation error`
+    - `test: cleaner bio with injection attempt is sanitized in search results`
+
+- [ ] Rate limiting (per-user, per-session)
+  - Done when: 60 reads/min, 10 writes/min per user session enforced
+  - Tests:
+    - `test: exceeding read rate limit returns 429 with retry-after`
+    - `test: exceeding write rate limit returns 429`
+    - `test: runaway loop detection (same tool, same params, >5 calls/min)`
+
+- [ ] Transport and token hardening
+  - Done when: MCP requests validate Origin, Clerk token verification includes resource/audience binding, and local grant status is checked on every request
+  - Tests:
+    - `test: valid token with wrong audience/resource metadata is rejected`
+    - `test: revoked local agent grant returns 401 or 403 even if Clerk token has not expired`
+    - `test: malformed MCP session id is rejected`
+
+- [ ] Audit logging
+  - Done when: every agent action produces an immutable audit record (who, what, when, session, outcome)
+  - Tests:
+    - `test: tool call creates audit log entry with user_id, session_id, tool_name, params, capability, result`
+    - `test: payment tool calls include amount and booking_id in audit record`
+
+- [ ] Instant revocation
+  - Done when: user can revoke all agent access from web/mobile; revocation blocks tool execution immediately through local grant checks and clears active sessions
+  - Tests:
+    - `test: revoked authorization blocks the next tool call immediately`
+    - `test: revoke-all clears every active agent session for the user`
+
+### 8.6 Frontend (Web + Mobile)
+
+- [ ] Agent access settings page
+  - Done when: user can view connected agents, review granted capabilities, configure spending limits, and revoke access
+  - Tests:
+    - `test: e2e - user views connected agents list`
+    - `test: e2e - user sees granted capabilities for an agent`
+    - `test: e2e - user sets $150 per-transaction spending cap`
+    - `test: e2e - user revokes agent access, agent is blocked on next call`
+
+- [ ] Approval notification flow
+  - Done when: Tier 3 actions trigger push notification with approve/deny, the server revalidates slot and price on approval, and the result propagates to the agent
+  - Tests:
+    - `test: e2e - agent books above cap, user receives push, approves, hold is created after revalidation`
+    - `test: e2e - agent books above cap, user denies, agent receives structured denial`
+    - `test: e2e - agent books above cap, slot changes before approval, user sees requote/conflict flow`
+
+### Slice 8 Checkpoint
+
+**Manually verify:** Connect an AI agent (approved test MCP client) to a user's Sweep account via OAuth. Search for cleaners, view a profile, get a quote. Book a cleaner within spending cap and verify a normal 5-minute hold is created. Book a cleaner above cap and verify the server creates an approval snapshot, sends a push notification, then revalidates availability and price before creating the hold after approval. Confirm payment with a saved Stripe payment method. Trigger a `requires_action` payment and verify handoff to normal checkout. Revoke agent access and verify the next tool call is blocked immediately.
 
 ---
 
