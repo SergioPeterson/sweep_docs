@@ -382,6 +382,15 @@ The current codebase has real progress, but it also has drift:
 - [ ] Phase D: Implement booking mutation tools with approval snapshots and revalidation
 - [ ] Phase E: Implement payment tools, spending limits, gateway hardening, and optional preview-gated SPT adapter
 
+### Locked defaults for implementation
+
+- Launch with approved/registered agent clients; do not treat dynamic client registration as MVP-default.
+- Use Clerk OAuth for identity plus protected resource metadata, but enforce Sweep permissions as first-party capabilities instead of custom OAuth scopes.
+- Prefer opaque access tokens when feasible so revocation is immediate; if JWT access tokens are used, keep local revocation checks on every request.
+- Tier 3 approvals must store a quote/approval snapshot and revalidate before creating a real 5-minute hold.
+- MVP payments use Sweep's existing saved-payment-method Stripe flow; any Shared Payment Token path stays behind a feature flag.
+- Treat recurring bookings, payment-method changes, and refund initiation as future sensitive actions, not Slice 8 MVP.
+
 ### 8.1 MCP Server Scaffold & OAuth
 
 - [ ] Streamable HTTP transport endpoint (`/mcp`)
@@ -548,6 +557,19 @@ The current codebase has real progress, but it also has drift:
     - `test: revoked authorization blocks the next tool call immediately`
     - `test: revoke-all clears every active agent session for the user`
 
+### 8.5a Data model required
+
+- [ ] `agent_authorizations`
+  - Done when: per-user, per-agent grants store granted Clerk scopes, Sweep capabilities, status, consent time, and revocation state
+- [ ] `agent_sessions`
+  - Done when: MCP sessions are tied to an authorization, user, agent client, token format, and revocation state
+- [ ] `agent_spending_limits`
+  - Done when: per-user transaction, daily, and weekly limits are persisted and editable
+- [ ] `agent_pending_approvals`
+  - Done when: Tier 3/4 requests persist tool input plus quote snapshot, status, expiry, and resolution timestamps
+- [ ] `agent_audit_logs`
+  - Done when: every tool call persists capability used, approval result, booking/payment references, and redacted parameters
+
 ### 8.6 Frontend (Web + Mobile)
 
 - [ ] Agent access settings page
@@ -568,6 +590,14 @@ The current codebase has real progress, but it also has drift:
 ### Slice 8 Checkpoint
 
 **Manually verify:** Connect an AI agent (approved test MCP client) to a user's Sweep account via OAuth. Search for cleaners, view a profile, get a quote. Book a cleaner within spending cap and verify a normal 5-minute hold is created. Book a cleaner above cap and verify the server creates an approval snapshot, sends a push notification, then revalidates availability and price before creating the hold after approval. Confirm payment with a saved Stripe payment method. Trigger a `requires_action` payment and verify handoff to normal checkout. Revoke agent access and verify the next tool call is blocked immediately.
+
+### Slice 8 Decisions Still Open
+
+- [ ] Decide whether reviewed-client allowlist remains the default through GA or if dynamic client registration is allowed later behind additional trust controls.
+- [ ] Decide quote-drift policy for delayed approvals: auto-expire versus new approval prompt.
+- [ ] Decide which future sensitive actions require Clerk reverification instead of a simple approval tap.
+- [ ] Decide whether Stripe Shared Payment Tokens are worth pursuing for partner agents after MVP, or if Sweep-saved payment methods remain the only supported path.
+- [ ] Decide whether recurring bookings and cleaner-side MCP access belong in post-MVP scope or are explicitly out of scope.
 
 ---
 
