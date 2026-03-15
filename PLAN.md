@@ -9,7 +9,7 @@ This is the working implementation plan for Sweep MVP. It is an actual-status tr
 - A slice is only `Complete` when live backend behavior, live web behavior, required tests, and launch guardrails are all in place.
 - Work already built out of order stays in the plan, but is labeled honestly as `Partial` or `Scaffold` until it meets completion criteria.
 
-**Reference docs:** [SYSTEM_DESIGN_OVERVIEW.md](./SYSTEM_DESIGN_OVERVIEW.md) | [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) | [API_SPECIFICATION.md](./API_SPECIFICATION.md) | [BACKEND_ARCHITECTURE.md](./BACKEND_ARCHITECTURE.md) | [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) | [IMPLEMENTATION_GUARDRAILS.md](./IMPLEMENTATION_GUARDRAILS.md) | [TESTING_STRATEGY.md](./TESTING_STRATEGY.md)
+**Reference docs:** [SYSTEM_DESIGN_OVERVIEW.md](./SYSTEM_DESIGN_OVERVIEW.md) | [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md) | [API_SPECIFICATION.md](./API_SPECIFICATION.md) | [BACKEND_ARCHITECTURE.md](./BACKEND_ARCHITECTURE.md) | [FRONTEND_ARCHITECTURE.md](./FRONTEND_ARCHITECTURE.md) | [IMPLEMENTATION_GUARDRAILS.md](./IMPLEMENTATION_GUARDRAILS.md) | [TESTING_STRATEGY.md](./TESTING_STRATEGY.md) | [AGENT_API_ARCHITECTURE.md](./AGENT_API_ARCHITECTURE.md)
 
 **Detailed execution notes:** [docs/plans/2026-02-10-implementation-execution-plan.md](./docs/plans/2026-02-10-implementation-execution-plan.md)
 
@@ -36,6 +36,7 @@ This is the working implementation plan for Sweep MVP. It is an actual-status tr
 | Slice 5 - Reviews & Ratings | Partial | Review read endpoints exist. Review creation, aggregate updates, and ranking integration do not. |
 | Slice 6 - Bonus Pool & Transparency | Partial | Bonus leaderboard/summary and customer fee breakdown ideas exist. Authoritative bonus calculation, persistence, awards, and ops ownership do not. |
 | Slice 7 - Admin & Operations | Partial | Admin dashboard/users/disputes surfaces exist. Dispute creation, refund execution, auditability, and runbooks are still missing. |
+| Slice 8 - Agent API (MCP Server) | Not started | MCP/agent access planning exists in docs, but OAuth, capability grants, approval flows, and agent-safe payment handling are not implemented yet. |
 
 ---
 
@@ -362,6 +363,46 @@ The current codebase has real progress, but it also has drift:
 - Refund and re-clean decisions trigger the correct downstream actions.
 - Suspended users are blocked from the relevant product surfaces.
 - Ops has enough state visibility to debug live incidents without raw database access.
+
+---
+
+## Slice 8: Agent API (MCP Server)
+
+**Status:** Not started
+
+**Goal:** AI agents can connect to a user's Sweep account via MCP, browse cleaners, create bookings, and initiate payments with explicit capability grants, spending limits, and approval guardrails.
+
+**Design doc:** [AGENT_API_ARCHITECTURE.md](./AGENT_API_ARCHITECTURE.md)
+
+### Rollout phases
+
+- Phase A: Scaffold MCP endpoint path, protected-resource metadata, registered-client auth, and read-only tool stubs.
+- Phase B: Lock Clerk OAuth verification, Sweep capability grants, transport/security contracts, and auth tests.
+- Phase C: Implement read-only tools, agent grants/sessions, and audit logging.
+- Phase D: Implement booking mutation tools with approval snapshots and revalidation.
+- Phase E: Implement payment tools, spending limits, gateway hardening, and an optional preview-gated SPT adapter.
+
+### Build requirements
+
+1. Add MCP Streamable HTTP support at `/mcp` with initialization handshake, session binding, and `Origin` validation.
+2. Use Clerk OAuth for identity and resource protection, but enforce Sweep-specific agent permissions as first-party capabilities instead of custom OAuth scopes.
+3. Require approved/registered agent clients at launch; leave dynamic client registration for a later hardening decision.
+4. Implement read-only tools for search, cleaner profile, availability, quote generation, and booking history.
+5. Implement mutation tools for create/cancel/reschedule/rate, with Tier 3 requests stored as approval snapshots rather than long-lived booking holds.
+6. Revalidate availability and price when a delayed approval is accepted before creating a real 5-minute hold.
+7. Use the existing saved-payment-method Stripe flow for MVP agent payments, with explicit fallback to customer checkout when SCA or manual payment is required.
+8. Keep any Stripe Shared Payment Token path behind a feature flag until preview access, partner support, and additional testing exist.
+9. Add local revocation, audit logging, per-user/per-session rate limiting, and booking/payment spending caps.
+10. Add web/mobile settings so users can inspect connected agents, manage capabilities, approve requests, and revoke access.
+
+### Completion evidence
+
+- MCP auth validates token issuer plus resource/audience binding and rejects invalid origins.
+- Agents can browse with read-only capabilities and never receive private cross-tenant data.
+- Above-cap or first-time-cleaner bookings require approval and are revalidated before a real hold is created.
+- Agent payment attempts either complete safely via saved payment method or hand off cleanly to normal checkout without accidental charges.
+- Users can revoke an agent and the very next tool call is blocked.
+- Automated coverage exists for auth, capabilities, approval expiry, requote/conflict behavior, payment fallback, audit logs, and revocation.
 
 ---
 
