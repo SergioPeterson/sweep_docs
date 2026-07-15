@@ -280,11 +280,13 @@ These statuses already exist in the shared contract and database schema. New end
 
 ## Idempotency
 
-Live endpoints that require or persist idempotency today:
+Live endpoints that require or persist explicit idempotency today:
 
 - `POST /booking/holds`
-- `POST /booking/confirm`
 - `POST /stripe/webhook`
+
+`POST /booking/confirm` is retry-safe by `paymentIntentId`: repeated calls return the existing booking when the same payment intent has already been confirmed.
+It does not currently require `X-Idempotency-Key` or write a separate API idempotency record.
 
 Endpoints that should be evaluated for idempotency hardening before broader production rollout:
 
@@ -302,7 +304,7 @@ Current storage model already available in the schema:
 - `api_idempotency_keys`
 - `webhook_events`
 
-The live hold, confirm, and webhook handlers use these idempotency records.
+The live hold and webhook handlers use these idempotency records.
 `POST /payments/create-intent` currently uses a derived Stripe idempotency key for PaymentIntent creation, but does not require the client header.
 
 ---
