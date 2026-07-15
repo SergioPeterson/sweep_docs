@@ -41,14 +41,16 @@ Current live backend routes are mostly unversioned. Normalizing around `/v1` is 
 
 ### Money Units
 
-- Canonical API contract uses **integer cents** for all money fields.
-- UI code is responsible for formatting dollars for display.
-- Booking prices, payments, payouts, refunds, and bonus amounts are integer cents at the API boundary.
-- `GET /search/cleaners.maxRate` is also integer cents. The web and mobile clients convert their dollar UI values before issuing the request.
+- Target contract: new money fields should use **integer cents** unless a legacy field below explicitly says otherwise.
+- Current live API is mixed for backward compatibility.
+- Holds, pricing previews, payment intents, admin payout records, bonus records, and `GET /search/cleaners.maxRate` use integer cents.
+- Several public response fields still return dollar values today, including cleaner card/profile display rates, booking `total` and `pricing.*` fields, booking tip/refund display amounts, and cleaner earnings transaction amounts.
+- UI code should convert dollar controls to cents for request fields such as `maxRate`, and should format response money according to each endpoint's live contract.
 
 ### Idempotency
 
-Use `X-Idempotency-Key` on canonical mutating booking/payment/dispute endpoints.
+Use `X-Idempotency-Key` where the live endpoint requires it.
+The hold and confirm paths use API idempotency records today; other mutating endpoints should be hardened individually before the spec marks them required.
 
 ### Canonical Booking Flow
 
@@ -109,7 +111,7 @@ It validates real availability and conflicts, but bypasses payment collection, s
 | `POST /bookings/:id/complete` | Live | Completes work and initiates payout processing. |
 | `POST /reviews` | Live | Creates one customer review per completed booking. |
 | `POST /bookings/:id/dispute` | Live | Opens a customer dispute with ownership and state guards. |
-| `POST /stripe/webhook` | Live | Persists idempotent webhook receipt and processes payment, payout, and Connect events with retry and dead-letter handling. |
+| `POST /stripe/webhook` | Live | Persists idempotent webhook receipt and processes Connect onboarding plus successful payment intent events with retry and dead-letter handling. |
 
 ### Bonus / Admin
 
@@ -198,7 +200,8 @@ Request shape today:
 ```json
 {
   "cleanerId": "uuid",
-  "slotId": "string",
+  "startTime": "2026-07-16T17:00:00.000Z",
+  "endTime": "2026-07-16T20:00:00.000Z",
   "duration": 3,
   "address": {
     "street": "123 Main St",
@@ -237,8 +240,9 @@ The client confirms payment with Stripe, then calls `POST /booking/confirm`.
 
 - Verifies Stripe signature.
 - Persists receipt in `webhook_events` before processing.
-- Handles Connect onboarding, successful payment intents, and payout-related state.
+- Handles Connect onboarding and successful payment intent state.
 - Retries failed or stale work and dead-letters exhausted attempts.
+- Payout transfers are initiated from booking completion and admin retry paths, not reconciled from payout or transfer webhook events yet.
 
 **Canonical direction**
 
@@ -276,15 +280,19 @@ These statuses already exist in the shared contract and database schema. New end
 
 ## Idempotency
 
-Canonical endpoints that should require `X-Idempotency-Key`:
+Live endpoints that require or persist idempotency today:
+
+- `POST /booking/holds`
+- `POST /booking/confirm`
+- `POST /stripe/webhook`
+
+Endpoints that should be evaluated for idempotency hardening before broader production rollout:
 
 - `POST /auth/sync`
-- `POST /booking/holds`
 - `POST /payments/create-intent`
-- `POST /booking/confirm`
 - `POST /bookings/:id/cancel`
 - `POST /bookings/:id/complete`
-- `POST /bookings/:id/review`
+- `POST /reviews`
 - `POST /bookings/:id/dispute`
 - admin refund-resolution actions
 
@@ -294,7 +302,8 @@ Current storage model already available in the schema:
 - `api_idempotency_keys`
 - `webhook_events`
 
-The live booking, payment, and webhook handlers use these idempotency records.
+The live hold, confirm, and webhook handlers use these idempotency records.
+`POST /payments/create-intent` currently uses a derived Stripe idempotency key for PaymentIntent creation, but does not require the client header.
 
 ---
 
