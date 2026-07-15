@@ -9,11 +9,11 @@ This document now tracks two things at once:
 
 The earlier version of this document described a mostly future-state API and incorrectly said the backend only exposed scaffold endpoints. That is no longer accurate.
 
-### Status As Of March 8, 2026
+### Status As Of July 15, 2026
 
-- The backend has real onboarding, search/browse, bonus, cleaner dashboard, and partial admin surface area.
-- Booking and payment flows are **not** yet canonical.
-- Some live behavior still drifts from shared contracts and must be reconciled in `Track 0` from [PLAN.md](./PLAN.md).
+- The backend has real onboarding, search/browse, booking, payments, payouts, reviews, bonus, admin, and MCP surfaces.
+- The customer booking flow is canonical: availability, hold, payment intent, then confirmation.
+- The remaining launch work is production provisioning and operational verification, not placeholder booking or payment handlers.
 
 ### Base URL
 
@@ -43,9 +43,8 @@ Current live backend routes are mostly unversioned. Normalizing around `/v1` is 
 
 - Canonical API contract uses **integer cents** for all money fields.
 - UI code is responsible for formatting dollars for display.
-- Current live code still has drift here:
-  - some web/backend search behavior uses dollar-style `maxRate`
-  - this must be reconciled before new customer booking features are added
+- Booking prices, payments, payouts, refunds, and bonus amounts are integer cents at the API boundary.
+- `GET /search/cleaners.maxRate` is also integer cents. The web and mobile clients convert their dollar UI values before issuing the request.
 
 ### Idempotency
 
@@ -57,7 +56,8 @@ The canonical customer path is:
 
 `GET /cleaners/:id/availability -> POST /booking/holds -> POST /payments/create-intent -> POST /booking/confirm`
 
-The current direct `POST /bookings` route is transitional and **non-canonical** until it is rewritten to honor real slot selection and conflict prevention.
+`POST /bookings` is an admin-only compatibility endpoint.
+It validates real availability and conflicts, but bypasses payment collection, so customer clients must not use it.
 
 ---
 
@@ -77,7 +77,7 @@ The current direct `POST /bookings` route is transitional and **non-canonical** 
 
 | Endpoint | Status | Notes |
 |---|---|---|
-| `GET /search/cleaners` | Partial | Live search works, but `date` is not honored yet and cursor pagination is not implemented. |
+| `GET /search/cleaners` | Live | Supports date and duration filtering against real availability. Cursor pagination is still a scale follow-up. |
 | `GET /cleaners/:id` | Live | Returns public cleaner profile with embedded recent reviews. |
 | `GET /cleaners/:id/reviews` | Live | Returns paginated review list and aggregate metadata. |
 | `GET /cleaners/:id/availability?date=&duration=` | Live | Returns bookable slots for a date/duration; this should become the canonical slot source for the UI. |
@@ -90,33 +90,40 @@ The current direct `POST /bookings` route is transitional and **non-canonical** 
 | `POST /cleaner/profile` | Live | Creates or updates cleaner profile. |
 | `POST /cleaner/availability` | Live | Stores weekly schedule. |
 | `POST /cleaner/availability/blackouts` | Live | Stores blocked periods. |
-| `POST /cleaner/stripe-connect` | Partial | Connect bootstrap is live; full durability/hardening is not done. |
-| `GET /cleaner/dashboard` | Partial | Real data route exists, but downstream booking/payment lifecycle is incomplete. |
-| `GET /cleaner/earnings` | Partial | Real summary route exists, but payout lifecycle is incomplete. |
-| `GET /cleaner/bonuses/summary` | Partial | Summary exists, but bonus calculation is not authoritative yet. |
+| `POST /cleaner/stripe-connect` | Live | Creates Stripe Connect onboarding links and persists webhook-driven onboarding state. |
+| `GET /cleaner/dashboard` | Live | Returns real cleaner booking and operational data. |
+| `GET /cleaner/earnings` | Live | Returns payout-backed earnings data. |
+| `GET /cleaner/bonuses/summary` | Live | Returns the cleaner's calculated bonus summary. |
 
 ### Booking / Payment
 
 | Endpoint | Status | Notes |
 |---|---|---|
-| `GET /me/bookings` | Partial | Read path exists, but lifecycle is based on non-canonical booking creation. |
-| `GET /bookings/:id` | Partial | Detail route exists. |
-| `POST /bookings` | Scaffold | Route exists but ignores real selected slot and creates an artificial booking time. Do not build new UX against this behavior. |
-| `POST /bookings/:id/cancel` | Partial | Cancel exists and refund math exists, but broader lifecycle is incomplete. |
-| `POST /payments/create-intent` | Scaffold | Still returns stubbed values. |
-| `POST /stripe/webhook` | Partial | Handles Stripe signature parsing and `account.updated`, but durable idempotency/async processing is still missing. |
+| `POST /booking/holds` | Live | Creates TTL-bound, idempotent holds with pricing snapshots and slot-conflict checks. |
+| `POST /payments/create-intent` | Live | Creates a Stripe PaymentIntent for a valid hold. |
+| `POST /booking/confirm` | Live | Confirms a valid held booking only after successful payment. |
+| `GET /me/bookings` | Live | Returns customer booking history for the canonical lifecycle. |
+| `GET /bookings/:id` | Live | Returns booking detail with ownership checks. |
+| `POST /bookings` | Partial | Admin-only compatibility creation path. It validates live availability but bypasses customer payment collection. |
+| `POST /bookings/:id/cancel` | Live | Applies the refund policy and records the outcome. |
+| `POST /bookings/:id/complete` | Live | Completes work and initiates payout processing. |
+| `POST /reviews` | Live | Creates one customer review per completed booking. |
+| `POST /bookings/:id/dispute` | Live | Opens a customer dispute with ownership and state guards. |
+| `POST /stripe/webhook` | Live | Persists idempotent webhook receipt and processes payment, payout, and Connect events with retry and dead-letter handling. |
 
 ### Bonus / Admin
 
 | Endpoint | Status | Notes |
 |---|---|---|
 | `GET /bonuses/current` | Live | Returns current or latest period snapshot. |
-| `GET /bonuses/leaderboard` | Partial | Real route exists, but period/award logic is not yet authoritative. |
-| `GET /admin/dashboard` | Partial | Dashboard exists, but stats surface is still basic. |
-| `GET /admin/users` | Partial | User list exists. |
-| `POST /admin/users/:id/suspend` | Partial | Suspend action exists; downstream enforcement is still incomplete. |
-| `GET /admin/disputes` | Partial | Dispute list exists. |
-| `POST /admin/disputes/:id/resolve` | Partial | Resolve action exists, but refund/re-clean execution is not complete. |
+| `GET /bonuses/leaderboard` | Live | Returns bonus-period leaderboard data. |
+| `GET /admin/dashboard` | Live | Returns date-filtered operational metrics. |
+| `GET /admin/users` | Live | Lists users for operations. |
+| `POST /admin/users/:id/suspend` | Live | Suspension is enforced in customer booking and cleaner search paths. |
+| `GET /admin/disputes` | Live | Lists disputes for operational triage. |
+| `POST /admin/disputes/:id/resolve` | Live | Resolves disputes and executes full or partial Stripe refunds. |
+| `GET /admin/payouts` | Live | Lists payouts, including failed payouts for reconciliation. |
+| `POST /admin/payouts/:id/retry` | Live | Retries failed Stripe transfers with idempotency. |
 
 ---
 
@@ -126,16 +133,16 @@ These are the interfaces new work should build toward.
 
 | Endpoint | Status | Purpose |
 |---|---|---|
-| `GET /search/cleaners?lat=&lng=&date=` | Partial | Must honor `date` and exclude cleaners without valid availability. |
+| `GET /search/cleaners?lat=&lng=&date=&duration=` | Live | Filters cleaners by real availability for the requested date and duration. |
 | `GET /cleaners/:id/availability?date=&duration=` | Live | Canonical slot source for customer booking UI. |
-| `POST /booking/holds` | Planned | Create TTL-bound booking hold with idempotency and conflict checks. |
-| `POST /payments/create-intent` | Scaffold | Must become real Stripe-backed intent creation or be folded into confirm flow. |
-| `POST /booking/confirm` | Planned | Turn a valid hold plus successful payment into a confirmed booking. |
-| `GET /me/bookings` | Partial | Should represent canonical booking lifecycle after hold/confirm is in place. |
-| `POST /bookings/:id/cancel` | Partial | Needs to operate against the canonical lifecycle with refund side effects. |
-| `POST /bookings/:id/complete` | Planned | Cleaner marks work complete; starts confirm/auto-confirm path. |
-| `POST /bookings/:id/review` | Planned | Customer submits one review for one completed booking. |
-| `POST /bookings/:id/dispute` | Planned | Customer opens dispute against a completed booking. |
+| `POST /booking/holds` | Live | Creates a TTL-bound booking hold with idempotency, pricing snapshot, and conflict checks. |
+| `POST /payments/create-intent` | Live | Creates a Stripe-backed PaymentIntent for the hold. |
+| `POST /booking/confirm` | Live | Turns a valid hold plus a successful payment into a confirmed booking. |
+| `GET /me/bookings` | Live | Represents the canonical booking lifecycle. |
+| `POST /bookings/:id/cancel` | Live | Cancels against the canonical lifecycle and records refund outcomes. |
+| `POST /bookings/:id/complete` | Live | Marks cleaner completion and starts customer-confirm or auto-confirm processing. |
+| `POST /reviews` | Live | Customer submits one review for one completed booking. |
+| `POST /bookings/:id/dispute` | Live | Customer opens a dispute against a completed booking. |
 
 ---
 
@@ -145,14 +152,12 @@ These are the interfaces new work should build toward.
 
 **Current live behavior**
 
-- Supports `lat`, `lng`, `radiusMeters`, `minRating`, `maxRate`, `services`, `sortBy`, and `limit`.
+- Supports `lat`, `lng`, `radiusMeters`, `minRating`, `maxRate`, `services`, `sortBy`, `limit`, `date`, and `duration`.
 - Returns public cleaner cards with rate, rating, services, and distance.
-- Does **not** currently enforce `date` availability filtering.
+- Applies date and duration filtering using the same availability, blackout, booking, and active-hold constraints as booking creation.
 
 **Canonical direction**
 
-- `date` must be honored.
-- `maxRate` should be treated consistently as integer cents across contract, backend, and web client.
 - Cursor pagination should be added if this becomes a launch or scale requirement.
 
 ### `GET /cleaners/:id/availability`
@@ -182,12 +187,11 @@ Response:
 
 **Canonical direction**
 
-- Customer booking UI should render these returned slots directly.
-- Do not keep hardcoded time-slot lists once the profile/booking flow is rebuilt.
+- Customer booking UI renders these returned slots directly.
 
 ### `POST /bookings`
 
-**Current live behavior**
+**Current live behavior - admin compatibility only**
 
 Request shape today:
 
@@ -208,8 +212,9 @@ Request shape today:
 
 **Important note**
 
-- This route currently ignores the requested slot and creates a booking at an artificial future time.
-- It should be treated as a transitional endpoint only.
+- This route accepts `startTime` and `endTime`, validates the cleaner's local availability, blackouts, existing bookings, and active holds, then creates a confirmed booking.
+- It bypasses PaymentIntent collection and is restricted to admins.
+- Customer clients must use the hold, payment intent, and confirm flow.
 
 ### `POST /payments/create-intent`
 
@@ -217,26 +222,27 @@ Request shape today:
 
 ```json
 {
-  "clientSecret": "pi_stub_..._secret",
-  "paymentIntentId": "pi_stub_..."
+  "holdId": "uuid",
+  "paymentMethodId": "pm_optional",
+  "savePaymentMethod": true
 }
 ```
 
-This is placeholder behavior and should not be treated as a production-ready payment API.
+The response contains the Stripe `clientSecret`, `paymentIntentId`, amount in cents, and currency.
+The client confirms payment with Stripe, then calls `POST /booking/confirm`.
 
 ### `POST /stripe/webhook`
 
 **Current live behavior**
 
 - Verifies Stripe signature.
-- Handles `account.updated` for Connect onboarding state.
-- Deduplicates using in-memory state only.
+- Persists receipt in `webhook_events` before processing.
+- Handles Connect onboarding, successful payment intents, and payout-related state.
+- Retries failed or stale work and dead-letters exhausted attempts.
 
 **Canonical direction**
 
-- Persist event receipt in the database.
-- Process asynchronously with retries and DLQ handling.
-- Support payment and payout event handling in addition to Connect onboarding.
+- Configure production alerting, rollback, and runbook ownership around the existing durable processing path.
 
 ---
 
@@ -288,7 +294,7 @@ Current storage model already available in the schema:
 - `api_idempotency_keys`
 - `webhook_events`
 
-What is still missing is consistent use of those tables across the live handlers.
+The live booking, payment, and webhook handlers use these idempotency records.
 
 ---
 
@@ -309,12 +315,9 @@ Do not add new divergent route shapes casually while Track 0 is still open.
 
 If you are building from this spec, use this order:
 
-1. Finish `Track 0` in [PLAN.md](./PLAN.md)
-2. Make search and profile use real availability end to end
-3. Implement `POST /booking/holds`
-4. Replace stub payment intent behavior
-5. Implement `POST /booking/confirm`
-6. Implement completion, payout, review, and dispute lifecycle
+1. Provision production credentials and infrastructure for Stripe, Resend, S3, and observability.
+2. Confirm branch protection, required checks, Code Owner review, dependency review, and provenance enforcement in GitHub.
+3. Run production-like browser and operational smoke checks during rollout.
 
 ---
 
