@@ -50,7 +50,9 @@ Current live backend routes are mostly unversioned. Normalizing around `/v1` is 
 ### Idempotency
 
 Use `X-Idempotency-Key` where the live endpoint requires it.
-The hold and confirm paths use API idempotency records today; other mutating endpoints should be hardened individually before the spec marks them required.
+Holds use API idempotency records today.
+Booking confirmation is retry-safe by `paymentIntentId`, not by a separate API idempotency record.
+Other mutating endpoints should be hardened individually before the spec marks them required.
 
 ### Canonical Booking Flow
 
